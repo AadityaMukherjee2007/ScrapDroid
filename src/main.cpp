@@ -1,4 +1,71 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+WebServer server(80);
+
+const char* htmlPage = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<title>ESP32 Car Control</title>
+<style>
+  body { text-align: center; font-family: Arial; margin-top: 50px; }
+  .key { display: inline-block; padding: 20px; margin: 10px; background-color: #eee; border-radius: 5px; font-weight: bold; }
+  .active { background-color: #ccc; }
+</style>
+<script>
+  let currentKey = null;
+  function sendCommand(cmd) {
+    fetch('/' + cmd).catch(e => console.error(e));
+  }
+  document.addEventListener('keydown', function(event) {
+    if (event.repeat) return;
+    let cmd = null;
+    let keyId = null;
+    switch(event.key.toLowerCase()) {
+      case 'w': cmd = 'f'; keyId = 'w'; break;
+      case 'a': cmd = 'fl'; keyId = 'a'; break;
+      case 's': cmd = 'b'; keyId = 's'; break;
+      case 'd': cmd = 'fr'; keyId = 'd'; break;
+      case 'q': cmd = 'lb'; keyId = 'q'; break;
+      case 'e': cmd = 'rb'; keyId = 'e'; break;
+    }
+    if (cmd && currentKey !== cmd) {
+      currentKey = cmd;
+      sendCommand(cmd);
+      if (keyId) document.getElementById('key-' + keyId).classList.add('active');
+    }
+  });
+  document.addEventListener('keyup', function(event) {
+    const key = event.key.toLowerCase();
+    if (['w', 'a', 's', 'd', 'q', 'e'].includes(key)) {
+      currentKey = null;
+      sendCommand('s');
+      if (document.getElementById('key-' + key)) {
+        document.getElementById('key-' + key).classList.remove('active');
+      }
+    }
+  });
+</script>
+</head>
+<body>
+  <h1>ESP32 Car Control</h1>
+  <p>Use WASD to drive. Q for left-back, E for right-back.</p>
+  <div>
+    <div class="key" id="key-q">Q (Left Back)</div>
+    <div class="key" id="key-w">W (Forward)</div>
+    <div class="key" id="key-e">E (Right Back)</div><br>
+    <div class="key" id="key-a">A (Left)</div>
+    <div class="key" id="key-s">S (Backward)</div>
+    <div class="key" id="key-d">D (Right)</div><br>
+  </div>
+</body>
+</html>
+)rawliteral";
 
 // Motor A
 int in1 = 25;
@@ -27,14 +94,35 @@ void setup()
 
   Serial.begin(115200);
 
-  // delay(3000);
-  // forward();
-  // delay(2000);
-  // stop();
+  // Connect to WiFi
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected.");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Setup WebServer endpoints
+  server.on("/", []() { server.send(200, "text/html", htmlPage); });
+  server.on("/f", []() { forward(); server.send(200, "text/plain", "forward"); });
+  server.on("/b", []() { backward(); server.send(200, "text/plain", "backward"); });
+  server.on("/fl", []() { forward_left(); server.send(200, "text/plain", "forward left"); });
+  server.on("/fr", []() { forward_right(); server.send(200, "text/plain", "forward right"); });
+  server.on("/lb", []() { backward_left(); server.send(200, "text/plain", "left back"); });
+  server.on("/rb", []() { backward_right(); server.send(200, "text/plain", "right back"); });
+  server.on("/s", []() { stop(); server.send(200, "text/plain", "stop"); });
+
+  server.begin();
 }
 
 void loop()
 {
+  // Handle web server requests
+  server.handleClient();
+
   // put your main code here, to run repeatedly:
   if (Serial.available() > 0)
   {
