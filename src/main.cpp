@@ -14,6 +14,8 @@ void forward();
 void backward();
 void forward_right();
 void forward_left();
+void backward_right();
+void backward_left();
 void stop();
 
 
@@ -24,13 +26,15 @@ void setup() {
   pinMode(in3, OUTPUT);
   pinMode(in4, OUTPUT);
 
+  Serial.begin(9600);
+
   delay(3000);
-  forward();
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  
+  String data = Serial.readString();
+  Serial.println(data);
 }
 
 // put function definitions here:
